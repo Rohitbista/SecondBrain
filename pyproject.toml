@@ -15,6 +15,9 @@ dependencies = [
 [project.scripts]
 secondbrain = "secondbrain.app.server:main"
 
+[tool.fastapi]
+entrypoint = "secondbrain.app.server:app"
+
 [build-system]
 requires = ["uv_build>=0.12.5,<0.13.0"]
 build-backend = "uv_build"
