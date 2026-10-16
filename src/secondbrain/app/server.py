@@ -1,14 +1,32 @@
+import asyncio
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 import uvicorn
-from secondbrain.app.routes.auth import router as auth_router
 
-app = FastAPI(title="Second Brain")
+from secondbrain.app.routes.auth import router as auth_router
+from secondbrain.app.routes.notes import router as notes_router
+from secondbrain.utils.embeddings import warmup
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Load the embedding model before the server starts accepting requests,
+    # in a thread so startup doesn't block the event loop.
+    await asyncio.to_thread(warmup)
+    yield
+
+
+app = FastAPI(title="Second Brain", lifespan=lifespan)
 
 app.include_router(auth_router)
+app.include_router(notes_router)
+
 
 @app.get("/")
 def root():
-    return {"message":"Second Brain is up and running"}
+    return {"message": "Second Brain is up and running"}
+
 
 def main():
     uvicorn.run(
