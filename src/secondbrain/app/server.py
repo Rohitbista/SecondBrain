@@ -1,7 +1,10 @@
 from fastapi import FastAPI
 import uvicorn
+from secondbrain.app.routes.auth import router as auth_router
 
-app = FastAPI()
+app = FastAPI(title="Second Brain")
+
+app.include_router(auth_router)
 
 @app.get("/")
 def root():
