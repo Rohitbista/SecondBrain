@@ -6,6 +6,7 @@ import uvicorn
 
 from secondbrain.app.routes.auth import router as auth_router
 from secondbrain.app.routes.notes import router as notes_router
+from secondbrain.app.routes.search import router as search_router
 from secondbrain.utils.embeddings import warmup
 
 
@@ -21,6 +22,7 @@ app = FastAPI(title="Second Brain", lifespan=lifespan)
 
 app.include_router(auth_router)
 app.include_router(notes_router)
+app.include_router(search_router)
 
 
 @app.get("/")
