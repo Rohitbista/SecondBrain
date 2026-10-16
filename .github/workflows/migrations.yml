@@ -1,0 +1,39 @@
+name: Database Migrations
+
+on:
+  push:
+    branches:
+      - main  # Triggers when code is pushed to your main branch
+    paths:
+      - 'migration/**'        # Triggers only if migration files change
+      - '**.py'             # Or if application models change
+  workflow_dispatch:        # Allows you to run migrations manually from the GitHub Actions tab
+
+jobs:
+  run-migrations:
+    name: Execute Alembic Migrations
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version-file: "pyproject.toml" # automatically matches your uv setup
+
+      - name: Install Dependencies
+        run: uv sync --frozen
+
+      - name: Run Alembic Upgrade
+        env:
+          ASYNCCOIN_DATABASE_URL: ${{ secrets.SECONDBRAIN_DATABASE_URL }}
+          ASYNCCOIN_JWT_SECRET: ${{ secrets.SECONDBRAIN_JWT_SECRET }}
+          ASYNCCOIN_BREVO_API_KEY: ${{ secrets.SECONDBRAIN_BREVO_API_KEY }}
+        run: uv run alembic upgrade head
