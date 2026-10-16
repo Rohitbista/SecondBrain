@@ -41,3 +41,8 @@ def embed_texts(texts: list[str]) -> list[list[float]]:
 
 def embed_text(text: str) -> list[float]:
     return embed_texts([text])[0]
+
+BGE_QUERY_PREFIX = "Represent this sentence for searching relevant passages: "
+
+def embed_query(text: str) -> list[float]:
+    return embed_text(BGE_QUERY_PREFIX + text)
