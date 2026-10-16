@@ -33,7 +33,7 @@ jobs:
 
       - name: Run Alembic Upgrade
         env:
-          ASYNCCOIN_DATABASE_URL: ${{ secrets.SECONDBRAIN_DATABASE_URL }}
-          ASYNCCOIN_JWT_SECRET: ${{ secrets.SECONDBRAIN_JWT_SECRET }}
-          ASYNCCOIN_BREVO_API_KEY: ${{ secrets.SECONDBRAIN_BREVO_API_KEY }}
+          SECONDBRAIN_DATABASE_URL: ${{ secrets.SECONDBRAIN_DATABASE_URL }}
+          SECONDBRAIN_JWT_SECRET: ${{ secrets.SECONDBRAIN_JWT_SECRET }}
+          SECONDBRAIN_BREVO_API_KEY: ${{ secrets.SECONDBRAIN_BREVO_API_KEY }}
         run: uv run alembic upgrade head
