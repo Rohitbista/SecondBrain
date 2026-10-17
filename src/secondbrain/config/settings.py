@@ -24,4 +24,7 @@ class Settings(BaseSettings):
     verification_token_ttl_hours: int = 24
     password_reset_token_ttl_minutes: int = 30
 
+    groq_api_key: str
+    groq_model: str = "openai/gpt-oss-120b"
+
 settings = Settings()
