@@ -9,6 +9,7 @@ from secondbrain.app.routes.notes import router as notes_router
 from secondbrain.app.routes.search import router as search_router
 from secondbrain.app.routes.users import router as user_router
 from secondbrain.app.routes.admin import router as admin_router
+from secondbrain.app.routes.chat import router as chat_router
 from secondbrain.utils.embeddings import warmup
 
 
@@ -27,6 +28,7 @@ app.include_router(notes_router)
 app.include_router(search_router)
 app.include_router(user_router)
 app.include_router(admin_router)
+app.include_router(chat_router)
 
 
 @app.get("/")

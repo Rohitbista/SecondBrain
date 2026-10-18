@@ -12,7 +12,9 @@ from sqlalchemy import (
     func,
     text,
 )
+from typing import Any
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+from sqlalchemy.dialects.postgresql import JSONB
 
 EMBEDDING_DIM = 384  # BAAI/bge-small-en-v1.5
 
@@ -106,3 +108,49 @@ class UserToken(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
+
+class ChatSession(Base):
+    """One conversation with the second-brain bot."""
+ 
+    __tablename__ = "chat_sessions"
+ 
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        server_onupdate=func.now(),
+    )
+ 
+    messages: Mapped[list["ChatMessage"]] = relationship(
+        back_populates="session",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+ 
+ 
+class ChatMessage(Base):
+    """A single turn. role is 'user' or 'assistant'.
+    For assistant turns, `sources` holds [{"id": 1, "title": "...", "score": 0.82}]."""
+ 
+    __tablename__ = "chat_messages"
+ 
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    session_id: Mapped[int] = mapped_column(
+        ForeignKey("chat_sessions.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    role: Mapped[str] = mapped_column(String(20), nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    sources: Mapped[list[dict[str, Any]] | None] = mapped_column(JSONB, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+ 
+    session: Mapped["ChatSession"] = relationship(back_populates="messages")
