@@ -26,5 +26,6 @@ class Settings(BaseSettings):
 
     groq_api_key: str
     groq_model: str = "openai/gpt-oss-120b"
+    groq_att_model: str = "whisper-large-v3-turbo"
 
 settings = Settings()
