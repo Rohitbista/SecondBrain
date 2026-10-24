@@ -21,6 +21,8 @@ from secondbrain.database.models import ChatMessage, ChatSession
 from secondbrain.database.session import SessionLocal
 from secondbrain.service import search_service
 from secondbrain.service.search_service import ScoredNote
+from secondbrain.service import notes_service
+from secondbrain.utils import tts
 from secondbrain.utils import llm
 
 logger = logging.getLogger(__name__)
@@ -223,6 +225,37 @@ async def stream_events(prep: Prepared) -> AsyncIterator[str]:
     except Exception:
         logger.exception("Chat stream failed")
         yield _sse("error", {"detail": "Something went wrong while answering."})
+
+# ---------- ask (voice) ----------
+MAX_QUESTION_CHARS = 2000  # same cap as AskIn.question
+
+
+async def voice_ask(
+    db: AsyncSession,
+    user_id: int,
+    audio_data: bytes,
+    filename: str,
+    session_id: int | None,
+    language: str | None,
+) -> dict[str, Any]:
+    """Push-to-talk turn: speech -> text -> normal RAG answer -> speech.
+
+    Transcription happens before any DB work, so no connection is held while
+    Whisper runs. TTS happens after the turn is committed, so a TTS failure
+    never loses the answer (audio is just returned as None).
+    """
+    transcript = await notes_service.transcribe_audio(audio_data, filename, language)
+    transcript = transcript[:MAX_QUESTION_CHARS]
+
+    result = await ask(db, user_id, transcript, session_id)
+
+    audio: bytes | None = None
+    try:
+        audio = await tts.synthesize(result["answer"], language or "en")
+    except tts.TTSError:
+        pass  # already logged; client can fall back to showing the text
+
+    return {**result, "transcript": transcript, "audio": audio}
 
 
 # ---------- history ----------

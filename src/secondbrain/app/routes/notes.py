@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from fastapi import APIRouter, Query, Response, status
+from fastapi import APIRouter, File, Form, Query, Response, UploadFile, status
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from secondbrain.app.routes.auth import DB, CurrentUser
@@ -52,6 +52,10 @@ class NoteList(BaseModel):
     offset: int
 
 
+class TranscriptOut(BaseModel):
+    text: str
+
+
 class ReindexOut(BaseModel):
     reindexed: int
 
@@ -82,6 +86,33 @@ async def reindex_notes(db: DB, user: CurrentUser):
     """Re-generate embeddings for all of the user's notes (in batches)."""
     count = await notes_service.reindex_notes(db, user.id)
     return ReindexOut(reindexed=count)
+
+
+@router.post("/voice", response_model=NoteOut, status_code=status.HTTP_201_CREATED)
+async def create_voice_note(
+    db: DB,
+    user: CurrentUser,
+    audio: UploadFile = File(..., description="Audio recording (webm, m4a, mp3, wav, ogg, ...)"),
+    title: str | None = Form(None, max_length=255, description="Optional; auto-generated if omitted"),
+    language: str | None = Form(None, min_length=2, max_length=5, description="e.g. 'en'; auto-detect if omitted"),
+):
+    """Transcribe an audio recording and save the transcript as a note."""
+    data = await audio.read(notes_service.MAX_AUDIO_BYTES + 1)
+    return await notes_service.create_note_from_audio(
+        db, user.id, data, audio.filename or "", title=title, language=language
+    )
+
+
+@router.post("/voice/transcribe", response_model=TranscriptOut)
+async def transcribe_voice(
+    user: CurrentUser,
+    audio: UploadFile = File(...),
+    language: str | None = Form(None, min_length=2, max_length=5),
+):
+    """Transcribe only (nothing saved) so the client can review/edit before POST /notes."""
+    data = await audio.read(notes_service.MAX_AUDIO_BYTES + 1)
+    text = await notes_service.transcribe_audio(data, audio.filename or "", language)
+    return TranscriptOut(text=text)
 
 
 @router.get("/{note_id}", response_model=NoteOut)

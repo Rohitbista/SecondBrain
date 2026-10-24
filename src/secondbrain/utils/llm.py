@@ -82,3 +82,23 @@ async def stream(messages: list[dict[str, str]]) -> AsyncIterator[str]:
 
     if not produced:
         raise LLMError("The AI model returned an empty answer.")
+
+async def transcribe(
+    audio_data: bytes, filename: str, language: str | None = None
+) -> str:
+    """Speech-to-text via Groq Whisper. Returns the stripped transcript (may be empty
+    if the audio contains no speech). `language` is an ISO-639-1 code like "en";
+    leave None to let Whisper auto-detect."""
+    kwargs: dict[str, Any] = {}
+    if language:
+        kwargs["language"] = language
+    try:
+        result = await _client().audio.transcriptions.create(
+            file=(filename, audio_data),
+            model=settings.groq_att_model,
+            response_format="json",
+            **kwargs,
+        )
+    except groq.APIError as exc:
+        raise _convert(exc) from exc
+    return (result.text or "").strip()
