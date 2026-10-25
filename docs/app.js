@@ -171,7 +171,7 @@ function searchView() {
     $("#res").innerHTML = hits.length ? hits.map(h => `<div class="card note"><h3>${esc(h.title)}${h.score != null ? `<span class="mute">match ${(h.score * 100).toFixed(0)}%</span>` : ""}</h3><p>${esc(h.snippet)}</p></div>`).join("")
       : `<p class="mute">No notes matched. Try different words or switch search mode.</p>`;
   });
-  $("#go").onclick = run; $("#q").onkeydown = e => e.key === "Enter" && run();
+  $("#go").onclick = run; $("#q").onkeydown = e => { if (e.key === "Enter") run(); };
 }
 
 /* ---------- chat ---------- */
@@ -228,7 +228,7 @@ function chatView() {
       loadHist();
     } catch (e) { bubble.remove(); throw e; } finally { $("#send").disabled = false; }
   });
-  $("#send").onclick = send; $("#ask").onkeydown = e => e.key === "Enter" && send();
+  $("#send").onclick = send; $("#ask").onkeydown = e => { if (e.key === "Enter") send(); };
   $("#mic").onclick = guard(() => toggleRec($("#mic"), guard(async (b, n) => {
     const r = await api("/chat/voice/ask", { method: "POST", form: audioForm(b, n, { session_id: sid }) });
     sid = r.session_id; add("user", r.transcript); add("assistant", r.answer, r.sources);
