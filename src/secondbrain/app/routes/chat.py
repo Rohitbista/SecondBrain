@@ -1,9 +1,11 @@
 from datetime import datetime
 
-from fastapi import APIRouter, Query, Response, status
+import base64
+from fastapi import APIRouter, File, Form, Query, Response, UploadFile, status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from secondbrain.service import chat_service, notes_service
 from secondbrain.app.routes.auth import DB, CurrentUser
 from secondbrain.service import chat_service
 
@@ -37,6 +39,14 @@ class AskOut(BaseModel):
     answer: str
     sources: list[SourceOut]
     session_id: int
+
+class VoiceAskOut(AskOut):
+    transcript: str = Field(description="What the speech-to-text heard.")
+    audio_base64: str | None = Field(
+        default=None,
+        description="MP3 of the spoken answer, base64-encoded. Null if TTS failed.",
+    )
+    audio_mime: str = "audio/mpeg"
 
 
 class ChatSessionOut(BaseModel):
@@ -97,6 +107,29 @@ async def ask_stream(payload: AskIn, db: DB, user: CurrentUser):
             "Cache-Control": "no-cache",
             "X-Accel-Buffering": "no",  # stop nginx from buffering the stream
         },
+    )
+
+@router.post("/voice/ask", response_model=VoiceAskOut)
+async def voice_ask(
+    db: DB,
+    user: CurrentUser,
+    audio: UploadFile = File(..., description="Push-to-talk recording (webm, m4a, mp3, wav, ogg, ...)"),
+    session_id: int | None = Form(None, description="Continue an existing chat session"),
+    language: str | None = Form(
+        None, min_length=2, max_length=5,
+        description="e.g. 'en'. Used for transcription and for the spoken reply.",
+    ),
+):
+    """Voice version of /ask: transcribe the recording, answer from the user's
+    notes, and return the answer as text plus spoken MP3 (base64)."""
+    data = await audio.read(notes_service.MAX_AUDIO_BYTES + 1)
+    result = await chat_service.voice_ask(
+        db, user.id, data, audio.filename or "", session_id, language
+    )
+    audio_bytes = result.pop("audio")
+    return VoiceAskOut(
+        **result,
+        audio_base64=base64.b64encode(audio_bytes).decode("ascii") if audio_bytes else None,
     )
 
 

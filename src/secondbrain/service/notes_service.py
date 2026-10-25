@@ -1,5 +1,6 @@
 """Business logic for notes. Owns the transaction (commits happen here)."""
 import asyncio
+import os
 from typing import Any
 
 from fastapi import HTTPException, status
@@ -7,10 +8,24 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from secondbrain.database import notes_db
 from secondbrain.database.models import Note
+from secondbrain.utils import llm
 from secondbrain.utils.embeddings import build_note_text, embed_text, embed_texts
+from secondbrain.utils.llm import LLMError
 
 MAX_LIMIT = 100
 REINDEX_BATCH_SIZE = 50
+
+# Groq's speech-to-text file limit is 25 MB on the free tier.
+MAX_AUDIO_BYTES = 25 * 1024 * 1024
+ALLOWED_AUDIO_EXTENSIONS = {
+    ".flac", ".mp3", ".mp4", ".mpeg", ".mpga", ".m4a", ".ogg", ".opus", ".wav", ".webm",
+}
+MAX_TITLE_LEN = 255
+
+_TITLE_SYSTEM_PROMPT = (
+    "You write short titles for voice notes. Reply with ONLY a title of at most "
+    "8 words: no quotes, no trailing punctuation, same language as the note."
+)
 
 # Columns returned to the client (everything except the embedding vector).
 _OUT_ATTRS = ["id", "user_id", "title", "content", "created_at", "updated_at"]
@@ -105,3 +120,72 @@ async def reindex_notes(db: AsyncSession, user_id: int) -> int:
         await db.commit()
         total += len(batch)
     return total
+
+
+# ---------- voice notes ----------
+def _llm_http_error(exc: LLMError) -> HTTPException:
+    code = status.HTTP_429_TOO_MANY_REQUESTS if exc.rate_limited else status.HTTP_502_BAD_GATEWAY
+    return HTTPException(code, exc.message)
+
+
+async def transcribe_audio(
+    audio_data: bytes, filename: str, language: str | None = None
+) -> str:
+    """Validate the audio and return its transcript. Raises HTTPException on bad input."""
+    ext = os.path.splitext(filename or "")[1].lower()
+    if ext not in ALLOWED_AUDIO_EXTENSIONS:
+        raise HTTPException(
+            status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            f"Unsupported audio format. Allowed: {', '.join(sorted(ALLOWED_AUDIO_EXTENSIONS))}",
+        )
+    if not audio_data:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Audio file is empty")
+    if len(audio_data) > MAX_AUDIO_BYTES:
+        raise HTTPException(
+            status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            f"Audio file too large (max {MAX_AUDIO_BYTES // (1024 * 1024)} MB)",
+        )
+
+    try:
+        transcript = await llm.transcribe(audio_data, filename, language)
+    except LLMError as exc:
+        raise _llm_http_error(exc) from exc
+
+    if not transcript:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "No speech detected in the audio")
+    return transcript
+
+
+async def _generate_title(transcript: str) -> str:
+    """Ask the LLM for a short title; fall back to the first few words."""
+    title = ""
+    try:
+        raw = await llm.complete(
+            [
+                {"role": "system", "content": _TITLE_SYSTEM_PROMPT},
+                {"role": "user", "content": transcript[:2000]},
+            ]
+        )
+        lines = raw.strip().strip('"\'').splitlines()
+        title = lines[0].strip() if lines else ""
+    except LLMError:
+        pass  # title generation is best-effort; never fail the note because of it
+
+    if not title:
+        words = transcript.split()
+        title = " ".join(words[:8]) + ("…" if len(words) > 8 else "")
+    return title[:MAX_TITLE_LEN]
+
+
+async def create_note_from_audio(
+    db: AsyncSession,
+    user_id: int,
+    audio_data: bytes,
+    filename: str,
+    title: str | None = None,
+    language: str | None = None,
+) -> Note:
+    """Transcribe audio and save it exactly like a text note (same embed + insert path)."""
+    transcript = await transcribe_audio(audio_data, filename, language)
+    title = (title or "").strip() or await _generate_title(transcript)
+    return await create_note(db, user_id, title=title, content=transcript)
