@@ -3,6 +3,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 import uvicorn
+from fastapi.middleware.cors import CORSMiddleware
 
 from secondbrain.app.routes.auth import router as auth_router
 from secondbrain.app.routes.notes import router as notes_router
@@ -11,7 +12,7 @@ from secondbrain.app.routes.users import router as user_router
 from secondbrain.app.routes.admin import router as admin_router
 from secondbrain.app.routes.chat import router as chat_router
 from secondbrain.utils.embeddings import warmup
-
+from secondbrain.config.settings import settings
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -22,6 +23,13 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Second Brain", lifespan=lifespan)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[settings.frontend_base_url],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 app.include_router(auth_router)
 app.include_router(notes_router)

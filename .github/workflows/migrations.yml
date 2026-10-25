@@ -38,4 +38,5 @@ jobs:
           SECONDBRAIN_BREVO_API_KEY: ${{ secrets.SECONDBRAIN_BREVO_API_KEY }}
           SECONDBRAIN_APP_BASE_URL: ${{ secrets.SECONDBRAIN_APP_BASE_URL }}
           SECONDBRAIN_GROQ_API_KEY: ${{ secrets.SECONDBRAIN_GROQ_API_KEY }}
+          SECONDBRAIN_FRONTEND_BASE_URL: ${{ secrets.SECONDBRAIN_FRONTEND_BASE_URL }}
         run: uv run alembic upgrade head
