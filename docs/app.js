@@ -1,4 +1,5 @@
-const API = "http://localhost:8000";//window.API_BASE || "";
+const API = "https://secondbrain-50b3d620.fastapicloud.dev";//"http://localhost:8000";//window.API_BASE || "";
+//const API = "http://localhost:8000";
 const $ = (s, r = document) => r.querySelector(s);
 const view = $("#view");
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));

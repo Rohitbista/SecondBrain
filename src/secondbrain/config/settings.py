@@ -20,7 +20,7 @@ class Settings(BaseSettings):
     brevo_sender_name: str = "Second Brain"
 
     app_base_url: str   # Meaning the backend
-    frontend_base_url: str = ""
+    frontend_base_url: str
     verification_token_ttl_hours: int = 24
     password_reset_token_ttl_minutes: int = 30
 

@@ -12,7 +12,7 @@ from secondbrain.app.routes.users import router as user_router
 from secondbrain.app.routes.admin import router as admin_router
 from secondbrain.app.routes.chat import router as chat_router
 from secondbrain.utils.embeddings import warmup
-
+from secondbrain.config.settings import settings
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -26,7 +26,7 @@ app = FastAPI(title="Second Brain", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5500", "http://127.0.0.1:5500"],
+    allow_origins=[settings.frontend_base_url],
     allow_methods=["*"],
     allow_headers=["*"],
 )
