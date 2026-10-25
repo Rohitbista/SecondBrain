@@ -27,7 +27,9 @@ async def _send(client: httpx.AsyncClient, to_email: str, subject: str, html: st
 def _verify_link(raw_token: str) -> str:
     """Points at the frontend if one is configured, otherwise straight at the API."""
     query = urlencode({"token": raw_token})
-    if settings.frontend_base_url:
+    if settings.frontend_base_url and settings.frontend_base_url.startswith("https://rohitbista"):
+        return f"{settings.frontend_base_url.rstrip('/')}/SecondBrain/#/verify?{query}"
+    elif settings.frontend_base_url:
         return f"{settings.frontend_base_url.rstrip('/')}/#/verify?{query}"
     return f"{settings.app_base_url.rstrip('/')}/auth/verify-email?{query}"
 
