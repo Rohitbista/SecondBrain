@@ -72,7 +72,7 @@ function authScreen(mode = "login", note = "") {
   $("#top").hidden = true;
   view.innerHTML = `<div class="card auth">${note ? `<p class="mute">${esc(note)}</p>` : ""}${forms[mode]}</div>`;
   view.querySelectorAll("[data-m]").forEach(a => (a.onclick = () => authScreen(a.dataset.m)));
-  if (mode === "reset") { const t = new URLSearchParams(location.search).get("reset"); if (t) $("#t").value = t; }
+  if (mode === "reset" && pendingResetToken) { $("#t").value = pendingResetToken; pendingResetToken = ""; }
   const submit = guard(async () => {
     if (mode === "login") {
       const f = new URLSearchParams({ username: v("u"), password: v("p") });
@@ -94,27 +94,53 @@ function authScreen(mode = "login", note = "") {
 }
 
 /* ---------- shell ---------- */
+let pendingResetToken = "";
+
+// Reads tokens from "#/verify?token=..." and "#/reset?token=..." (old ?verify= / ?token= / ?reset= links still work)
+function linkParams() {
+  const [route, qs = ""] = location.hash.replace(/^#\/?/, "").split("?");
+  const h = new URLSearchParams(qs), s = new URLSearchParams(location.search);
+  return {
+    verifyToken: route === "verify" ? h.get("token") : (s.get("verify") || s.get("token")),
+    resetToken: route === "reset" ? h.get("token") : s.get("reset"),
+  };
+}
 async function boot() {
-  const q = new URLSearchParams(location.search);
-  if (q.get("verify") || q.get("token")) {   // link from the verification email: ?verify=<token>
-    const t = q.get("verify") || q.get("token");
-    history.replaceState(null, "", location.pathname);
-    try { const r = await api("/auth/verify-email?token=" + encodeURIComponent(t)); return authScreen("login", r.message); }
+    const { verifyToken, resetToken } = linkParams();
+  if (verifyToken) {
+    history.replaceState(null, "", location.pathname);   // remove token from the URL
+    try { const r = await api("/auth/verify-email?token=" + encodeURIComponent(verifyToken)); return authScreen("login", r.message); }
     catch (e) { return authScreen("login", e.message); }
   }
-  if (q.get("reset") && !token) return authScreen("reset");
-  if (!token) return authScreen();
-  try { me = await api("/auth/me"); } catch { return; }
+  if (resetToken && !token) {
+    pendingResetToken = resetToken;
+    history.replaceState(null, "", location.pathname);
+    return authScreen("reset");
+  }
+  if (!token) return authScreen("login");
+  try { me = await api("/auth/me"); }
+  catch (e) {
+    token = null; localStorage.removeItem("sb_token");
+    return authScreen("login", e.message);
+  }
   const tabs = ["notes", "search", "chat", "account", ...(me.is_admin ? ["admin"] : [])];
   $("#top").hidden = false;
-  $("#nav").innerHTML = tabs.map(t => `<button data-t="${t}">${t[0].toUpperCase() + t.slice(1)}</button>`).join("");
-  $("#nav").onclick = e => e.target.dataset.t && show(e.target.dataset.t);
+  const ICONS = {
+    notes: "M4 20h4L19 9l-4-4L4 16v4z M13.5 6.5l4 4",
+    search: "M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14z M20 20l-4-4",
+    chat: "M4 5h16v11H9l-5 4V5z",
+    account: "M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8z M4 21c0-4 4-6 8-6s8 2 8 6",
+    admin: "M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6l8-3z",
+  };
+  $("#nav").innerHTML = tabs.map(t => `<button data-t="${t}"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${ICONS[t]}"/></svg><span>${t[0].toUpperCase() + t.slice(1)}</span></button>`).join("");
+  $("#nav").onclick = e => { const b = e.target.closest("button[data-t]"); if (b) show(b.dataset.t); };
   show(tabs.includes(tab) ? tab : "notes");
 }
-function show(t) {
+function show(t, ...args) {
   tab = t;
-  document.querySelectorAll("#nav button").forEach(b => b.classList.toggle("on", b.dataset.t === t));
-  ({ notes: notesView, search: searchView, chat: chatView, account: accountView, admin: adminView })[t]();
+  document.querySelectorAll("#nav button").forEach(b => { const on = b.dataset.t === t; b.classList.toggle("on", on); on ? b.setAttribute("aria-current", "page") : b.removeAttribute("aria-current"); });
+  window.scrollTo(0, 0);
+  ({ notes: notesView, search: searchView, chat: chatView, account: accountView, admin: adminView })[t](...args);
 }
 const pager = (total, limit, offset) => `<div class="pager"><button class="ghost" data-pg="${offset - limit}" ${offset <= 0 ? "disabled" : ""}>Previous</button>
   <span class="mute">${total ? offset + 1 : 0}–${Math.min(offset + limit, total)} of ${total}</span>
@@ -123,56 +149,63 @@ const bindPager = (fn) => view.querySelectorAll("[data-pg]").forEach(b => (b.onc
 
 /* ---------- notes ---------- */
 function notesView(offset = 0, editing = null) {
-  const limit = 10;
   view.innerHTML = `<h2>Notes</h2>
+  <p class="mute mini">Looking for older notes? They now live in <a id="tosearch">Search</a>.</p>
   <div class="card"><h3 id="fh">New note</h3>${field("nt", "Title", "text", 'maxlength="255"')}
     <label for="nc">Content</label><textarea id="nc"></textarea>
-    <div class="row" style="margin-top:.7rem"><button id="save">Save note</button><button id="cancel" class="ghost" hidden>Cancel edit</button>
-    <span class="sp"></span><button id="vn" class="ghost">Record voice note</button><button id="vt" class="ghost">Record and transcribe</button></div></div>
-  <div class="row" style="margin-bottom:.7rem"><span class="mute">Your notes, newest first.</span><span class="sp"></span><button id="reidx" class="ghost">Rebuild embeddings</button></div>
-  <div id="list"></div>`;
+    <div class="row actions" style="margin-top:.7rem"><button id="save">Save note</button><button id="cancel" class="ghost" hidden>Cancel edit</button>
+    <span class="sp"></span><button id="vn" class="ghost">Record voice note</button><button id="vt" class="ghost">Record and transcribe</button></div></div>`;
+  $("#tosearch").onclick = () => show("search");
   if (editing) { $("#fh").textContent = "Edit note"; $("#nt").value = editing.title; $("#nc").value = editing.content; $("#cancel").hidden = false; }
-  $("#cancel").onclick = () => notesView(offset);
+  $("#cancel").onclick = () => (editing ? show("search") : notesView());
   $("#save").onclick = guard(async () => {
     const json = { title: v("nt"), content: v("nc") };
     if (editing) await api("/notes/" + editing.id, { method: "PATCH", json }); else await api("/notes", { method: "POST", json });
-    toast("Note saved."); notesView(editing ? offset : 0);
+    toast("Note saved."); editing ? show("search") : notesView();
   });
   $("#vn").onclick = guard(() => toggleRec($("#vn"), guard(async (b, n) => {
     await api("/notes/voice", { method: "POST", form: audioForm(b, n, { title: v("nt") }) });
-    toast("Voice note saved."); notesView(0);
+    toast("Voice note saved."); notesView();
   })));
   $("#vt").onclick = guard(() => toggleRec($("#vt"), guard(async (b, n) => {
     const r = await api("/notes/voice/transcribe", { method: "POST", form: audioForm(b, n) });
     $("#nc").value = (v("nc") ? v("nc") + "\n" : "") + r.text; toast("Transcript added. Review it, then save.");
   })));
-  $("#reidx").onclick = guard(async () => { const r = await api("/notes/reindex", { method: "POST" }); toast(`Re-indexed ${r.reindexed} notes.`); });
-  guard(async () => {
-    const d = await api(`/notes?limit=${limit}&offset=${offset}`);
-    $("#list").innerHTML = (d.items.length ? d.items.map(n => `<div class="card note"><h3>${esc(n.title)}<span class="mute">${fmt(n.updated_at)}</span></h3>
-      <p>${esc(n.content)}</p><div class="row"><button class="ghost" data-e="${n.id}">Edit</button><button class="danger" data-d="${n.id}">Delete</button></div></div>`).join("")
-      : `<p class="mute">No notes yet. Write one above or record a voice note.</p>`) + pager(d.total, limit, offset);
-    bindPager(o => notesView(o));
-    view.querySelectorAll("[data-e]").forEach(b => (b.onclick = guard(async () => notesView(offset, await api("/notes/" + b.dataset.e)))));
-    view.querySelectorAll("[data-d]").forEach(b => (b.onclick = guard(async () => {
-      if (!confirm("Delete this note?")) return;
-      await api("/notes/" + b.dataset.d, { method: "DELETE" }); notesView(offset);
-    })));
-  })();
 }
 
-/* ---------- search ---------- */
+/* ---------- search (search bar + all notes underneath) ---------- */
 function searchView() {
-  view.innerHTML = `<h2>Search</h2><div class="card"><div class="row"><input id="q" placeholder="Search your notes" maxlength="500">
+  const limit = 10;
+  view.innerHTML = `<h2>Search</h2><div class="card"><div class="row searchbar"><input id="q" placeholder="Search your notes" maxlength="500">
     <select id="mode" style="width:auto"><option value="">By meaning</option><option value="/keyword">By exact words</option></select>
-    <button id="go">Search</button></div></div><div id="res"></div>`;
+    <button id="go">Search</button></div></div><div id="out"></div>`;
+
+  const listNotes = guard(async (o = 0) => {
+    const d = await api(`/notes?limit=${limit}&offset=${o}`);
+    if (!d.items.length && o > 0) return listNotes(Math.max(0, o - limit));
+    $("#out").innerHTML = `<div class="row" style="margin-bottom:.7rem"><span class="mute">All your notes, newest first.</span><span class="sp"></span><button id="reidx" class="ghost">Rebuild embeddings</button></div>`
+      + (d.items.length ? d.items.map(n => `<div class="card note"><h3>${esc(n.title)}<span class="mute">${fmt(n.updated_at)}</span></h3>
+        <p>${esc(n.content)}</p><div class="row"><button class="ghost" data-e="${n.id}">Edit</button><button class="danger" data-d="${n.id}">Delete</button></div></div>`).join("")
+        : `<p class="mute">No notes yet. Add one in the Notes tab.</p>`) + pager(d.total, limit, o);
+    bindPager(listNotes);
+    $("#reidx").onclick = guard(async () => { const r = await api("/notes/reindex", { method: "POST" }); toast(`Re-indexed ${r.reindexed} notes.`); });
+    view.querySelectorAll("[data-e]").forEach(b => (b.onclick = guard(async () => show("notes", 0, await api("/notes/" + b.dataset.e)))));
+    view.querySelectorAll("[data-d]").forEach(b => (b.onclick = guard(async () => {
+      if (!confirm("Delete this note?")) return;
+      await api("/notes/" + b.dataset.d, { method: "DELETE" }); listNotes(o);
+    })));
+  });
+
   const run = guard(async () => {
-    if (!v("q").trim()) return;
+    if (!v("q").trim()) return listNotes(0);
     const hits = await api(`/search${v("mode")}?q=${encodeURIComponent(v("q"))}&limit=${v("mode") ? 20 : 5}`);
-    $("#res").innerHTML = hits.length ? hits.map(h => `<div class="card note"><h3>${esc(h.title)}${h.score != null ? `<span class="mute">match ${(h.score * 100).toFixed(0)}%</span>` : ""}</h3><p>${esc(h.snippet)}</p></div>`).join("")
-      : `<p class="mute">No notes matched. Try different words or switch search mode.</p>`;
+    $("#out").innerHTML = `<div class="row" style="margin-bottom:.7rem"><span class="mute">${hits.length} result${hits.length === 1 ? "" : "s"}</span><span class="sp"></span><button id="all" class="ghost">Show all notes</button></div>`
+      + (hits.length ? hits.map(h => `<div class="card note"><h3>${esc(h.title)}${h.score != null ? `<span class="mute">match ${(h.score * 100).toFixed(0)}%</span>` : ""}</h3><p>${esc(h.snippet)}</p></div>`).join("")
+      : `<p class="mute">No notes matched. Try different words or switch search mode.</p>`);
+    $("#all").onclick = () => { $("#q").value = ""; listNotes(0); };
   });
   $("#go").onclick = run; $("#q").onkeydown = e => { if (e.key === "Enter") run(); };
+  listNotes(0);
 }
 
 /* ---------- chat ---------- */
@@ -181,7 +214,7 @@ function chatView() {
   view.innerHTML = `<h2>Ask your notes</h2><div class="chat"><aside class="card sess"><button id="newc" class="ghost">New chat</button><div id="hist" class="sess"></div>
     <button id="clr" class="danger">Clear all history</button></aside>
     <section class="card"><div id="msgs" class="msgs"></div>
-    <div class="row"><input id="ask" maxlength="2000" placeholder="Ask a question about your notes"><button id="send">Ask</button><button id="mic" class="ghost">Ask by voice</button></div></section></div>`;
+    <div class="row chatbar"><input id="ask" maxlength="2000" placeholder="Ask a question about your notes"><button id="send">Ask</button><button id="mic" class="ghost">Ask by voice</button></div></section></div>`;
   const msgs = $("#msgs");
   const add = (role, text, sources) => {
     const d = document.createElement("div"); d.className = "m " + role; d.textContent = text;
