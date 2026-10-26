@@ -23,25 +23,13 @@ async def _send(client: httpx.AsyncClient, to_email: str, subject: str, html: st
     )
     response.raise_for_status()
 
-
-def _verify_link(raw_token: str) -> str:
-    """Points at the frontend if one is configured, otherwise straight at the API."""
-    query = urlencode({"token": raw_token})
-    if settings.frontend_base_url and settings.frontend_base_url.startswith("https://rohitbista"):
-        return f"{settings.frontend_base_url.rstrip('/')}/SecondBrain/#/verify?{query}"
-    elif settings.frontend_base_url:
-        return f"{settings.frontend_base_url.rstrip('/')}/#/verify?{query}"
-    return f"{settings.app_base_url.rstrip('/')}/auth/verify-email?{query}"
-
-
-def _reset_link(raw_token: str) -> str:
-    query = urlencode({"token": raw_token})
-    return f"{settings.frontend_base_url.rstrip('/')}/#/reset?{query}"
-
+def _frontend_url(route: str, raw_token: str) -> str:
+    base = settings.frontend_base_url.rstrip("/") + settings.frontend_path.rstrip("/")
+    return f"{base}/#/{route}?{urlencode({'token': raw_token})}"
 
 async def send_verification_email(client: httpx.AsyncClient, to_email: str, raw_token: str) -> None:
     """Runs as a background task: never raises (user can hit 'resend')."""
-    link = _verify_link(raw_token)
+    link = _frontend_url("verify", raw_token)
 
     if not settings.brevo_api_key:
         logger.warning("Brevo not configured. Verification link for %s: %s", to_email, link)
@@ -65,7 +53,7 @@ async def send_password_reset_email(client: httpx.AsyncClient, to_email: str, ra
         return
 
     if settings.frontend_base_url:
-        action = f'<p><a href="{_reset_link(raw_token)}">Set a new password</a></p>'
+        action = f'<p><a href="{_frontend_url("reset", raw_token)}">Set a new password</a></p>'
     else:
         # No frontend yet: the user submits the token to the API themselves
         action = (

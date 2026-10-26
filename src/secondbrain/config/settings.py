@@ -23,6 +23,7 @@ class Settings(BaseSettings):
     frontend_base_url: str
     verification_token_ttl_hours: int = 24
     password_reset_token_ttl_minutes: int = 30
+    frontend_path: str = ""
 
     groq_api_key: str
     groq_model: str = "openai/gpt-oss-120b"

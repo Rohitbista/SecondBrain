@@ -42,4 +42,33 @@ table{width:100%;border-collapse:collapse;font-size:.9rem}th,td{text-align:left;
 .src{font-size:.8rem;color:var(--mute);margin-top:.4rem}
 #toast{position:fixed;bottom:1rem;left:50%;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:.6rem 1rem;border-radius:8px;opacity:0;pointer-events:none;transition:opacity .2s;max-width:90vw}
 #toast.show{opacity:1}#toast.err{background:var(--bad);color:#fff}
+[hidden]{display:none!important}
+nav .ico{display:none}
+.note h3{flex-wrap:wrap}
+.note p{overflow-wrap:anywhere}
+.mini{margin:-.4rem 0 1rem}
+
+/* ---------- phones: compact header + bottom tab bar ---------- */
+@media (max-width:700px){
+  header{flex-wrap:nowrap;gap:.6rem;padding:.5rem .9rem}
+  .brand{flex:1}
+  #logout{padding:.35rem .75rem;font-size:.9rem}
+  nav{position:fixed;left:0;right:0;bottom:0;z-index:6;flex:none;flex-wrap:nowrap;gap:0;justify-content:space-around;
+    background:var(--panel);border-top:1px solid var(--line);padding:.3rem .3rem calc(.3rem + env(safe-area-inset-bottom))}
+  nav button{flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;gap:.15rem;padding:.35rem .2rem;font-size:.72rem;border-radius:10px}
+  nav button.on{background:none;color:var(--acc);font-weight:600}
+  nav .ico{display:block;width:22px;height:22px}
+  main{padding:1rem .8rem calc(5.5rem + env(safe-area-inset-bottom))}
+  h2{font-size:1.3rem;margin-bottom:.8rem}
+  .card{padding:.85rem}
+  .auth{margin-top:4vh}
+  .actions .sp{display:none}
+  .actions button,.note .row button{flex:1 1 auto}
+  .searchbar>input,.chatbar>input{flex-basis:100%}
+  .searchbar>select,.searchbar>button,.chatbar>button{flex:1}
+  .sess #hist{max-height:9rem;overflow-y:auto}
+  .m{max-width:92%}
+  .msgs{max-height:50vh}
+  #toast{bottom:calc(4.8rem + env(safe-area-inset-bottom))}
+}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
