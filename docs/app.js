@@ -11,7 +11,12 @@ function toast(msg, err) {
   t.textContent = msg; t.className = "show" + (err ? " err" : "");
   clearTimeout(toast.t); toast.t = setTimeout(() => (t.className = ""), 3500);
 }
-const guard = fn => async (...a) => { try { await fn(...a); } catch (e) { toast(e.message, true); } };
+let viewId = 0;
+const guard = fn => async (...a) => {
+  const id = viewId;
+  try { await fn(...a); }
+  catch (e) { if (id === viewId) toast(e.message, true); }   // ignore errors from a tab you've already left
+};
 
 async function api(path, { method = "GET", json, form, raw } = {}) {
   const headers = {}; let body = form;
@@ -137,6 +142,7 @@ async function boot() {
   show(tabs.includes(tab) ? tab : "notes");
 }
 function show(t, ...args) {
+  viewId++;
   tab = t;
   document.querySelectorAll("#nav button").forEach(b => { const on = b.dataset.t === t; b.classList.toggle("on", on); on ? b.setAttribute("aria-current", "page") : b.removeAttribute("aria-current"); });
   window.scrollTo(0, 0);
