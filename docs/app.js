@@ -14,8 +14,11 @@ function toast(msg, err) {
 let viewId = 0;
 const guard = fn => async (...a) => {
   const id = viewId;
-  try { await fn(...a); }
-  catch (e) { if (id === viewId) toast(e.message, true); }   // ignore errors from a tab you've already left
+  try {
+    await fn(...a);
+  } catch (e) {
+    if (id === viewId) toast(e.message, true);
+  }
 };
 
 async function api(path, { method = "GET", json, form, raw } = {}) {
